@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Billionaire Simulator</title>
+<style>
+:root{--bg:#ffffff;--card:#eef2fb;--tx:#1b2240;--mut:#69729a;--ac:#22c55e;--gold:#f59e0b}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151b33;--card:#222b50;--tx:#eef1ff;--mut:#9aa4cc}}
+:root[data-theme="dark"]{--bg:#151b33;--card:#222b50;--tx:#eef1ff;--mut:#9aa4cc}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;overflow:hidden;background:#9fd8ff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--tx);touch-action:manipulation}
+#c{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#hud{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 10px);background:rgba(20,26,48,.72);backdrop-filter:blur(8px);color:#fff;border-radius:18px;padding:10px 16px;text-align:center;pointer-events:none}
+#money{font-size:34px;font-weight:900;color:#ffd84a;letter-spacing:.5px}
+#ips{font-size:14px;opacity:.9;margin-bottom:6px}
+#bar{height:7px;background:#ffffff30;border-radius:9px;overflow:hidden}
+#barf{display:block;height:100%;width:0;background:linear-gradient(90deg,#22c55e,#ffd84a);border-radius:9px}
+#goal{font-size:11px;opacity:.75}
+#bottom{position:fixed;left:0;right:0;bottom:0;display:flex;flex-direction:column}
+#tapRow{display:flex;justify-content:center;padding-bottom:10px}
+#tap{width:132px;height:132px;border-radius:50%;border:5px solid #fff;background:radial-gradient(circle at 35% 30%,#ffe27a,#f59e0b);color:#5a3200;box-shadow:0 8px 20px #0004;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:inherit;transition:transform .07s}
+#tap:active,#tap.p{transform:scale(.92)}
+#tap span{font-size:36px;line-height:1}#tap b{font-size:15px}#tap em{font-style:normal;font-size:13px;font-weight:800}
+#panel{background:var(--bg);border-radius:22px 22px 0 0;box-shadow:0 -6px 24px #0003;padding-bottom:env(safe-area-inset-bottom,0px)}
+#tabs{display:flex;gap:6px;padding:8px 10px}
+#tabs button{flex:1;border:0;border-radius:12px;padding:10px 4px;font:700 14px inherit;font-family:inherit;background:var(--card);color:var(--mut)}
+#tabs button.on{background:var(--ac);color:#fff}
+#lists{max-height:34vh;overflow-y:auto;padding:0 10px 10px;-webkit-overflow-scrolling:touch}
+.it{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:14px;padding:9px 10px;margin-bottom:7px}
+.em{font-size:28px;width:38px;text-align:center}
+.inf{flex:1;min-width:0}.inf b{display:block;font-size:15px}.inf small{color:var(--mut);font-size:12px}
+.buy{border:0;border-radius:12px;background:var(--ac);color:#fff;font:800 14px inherit;font-family:inherit;padding:11px 12px;min-width:86px}
+.buy.off{background:#8b93b3;opacity:.6}
+.fl{position:fixed;pointer-events:none;font-weight:900;color:#fff;font-size:20px;text-shadow:0 2px 5px #000a;transform:translate(-50%,-50%);animation:up .9s ease-out forwards;z-index:5}
+.fl.s{font-size:15px;color:#ffe27a}
+@keyframes up{to{transform:translate(-50%,-190%);opacity:0}}
+#modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;padding:24px;z-index:20}
+.card{background:var(--bg);border-radius:22px;padding:24px;max-width:340px;text-align:center}
+.card h2{margin:0 0 8px}.card p{color:var(--mut);margin:0 0 16px;line-height:1.4}
+.card button{border:0;border-radius:14px;background:var(--ac);color:#fff;font:800 16px inherit;font-family:inherit;padding:13px 30px}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud"><div id="money">$100</div><div id="ips">+$0/s</div><div id="bar"><i id="barf"></i></div><small id="goal">Ziel: 1 Mrd. $ – werde Milliardär!</small></div>
+<div id="bottom">
+ <div id="tapRow"><button id="tap"><span>💰</span><b>TIPPEN</b><em id="tv"></em></button></div>
+ <div id="panel"><div id="tabs"><button data-t="0" class="on">🏙️ Gebäude</button><button data-t="1">⚡ Upgrades</button><button data-t="2">⚙️ Info</button></div>
+ <div id="lists"><div id="l0"></div><div id="l1" hidden></div>
+ <div id="l2" hidden><div class="it" style="display:block;line-height:1.6">Gesamt verdient: <b id="st"></b><br>Offline-Einnahmen: <b id="of"></b><br><small style="color:var(--mut)">Drehe die Stadt mit dem Finger. Tippe auf die Stadt oder den Button, um Geld zu verdienen.</small></div>
+ <button id="reset" class="buy" style="width:100%;background:#ef4444">Spielstand löschen</button></div></div></div>
+</div>
+<div id="modal" hidden><div class="card"><h2></h2><p></p><button>Weiter</button></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const B=[
+{n:'Limonadenstand',e:'🍋',c:50,i:1},{n:'Café',e:'☕',c:300,i:6},{n:'Wohnhaus',e:'🏠',c:1800,i:35},
+{n:'Supermarkt',e:'🛒',c:10000,i:180},{n:'Bürogebäude',e:'🏢',c:60000,i:900},{n:'Fabrik',e:'🏭',c:400000,i:5000},
+{n:'Wolkenkratzer',e:'🌆',c:5e6,i:35000},{n:'Raumhafen',e:'🚀',c:75e6,i:300000}];
+const U=[
+{k:'f',n:'Starker Finger',e:'👆',d:l=>'+1 pro Tipp (aktuell +'+l+')',c:l=>Math.floor(25*1.55**l),max:99},
+{k:'b',n:'Business-Boost',e:'📈',d:l=>'+10 % Gebäude-Einnahmen (Stufe '+l+')',c:l=>Math.floor(400*1.9**l),max:50},
+{k:'g',n:'Goldene Tipps',e:'✨',d:l=>'Tipp gibt +5 % der Einnahmen/s (Stufe '+l+')',c:l=>Math.floor(3000*2.2**l),max:10},
+{k:'o',n:'Offline-Tresor',e:'🌙',d:l=>'Offline-Limit '+(2+2*l)+' Std. (+2 Std. pro Stufe)',c:l=>Math.floor(1500*2.4**l),max:10}];
+const S0=()=>({m:100,t:0,n:B.map(()=>0),u:{f:0,b:0,g:0,o:0},ts:Date.now(),win:false});
+let S=load();
+function load(){try{const s=JSON.parse(localStorage.getItem('bsim1'));if(s&&s.n&&s.n.length===B.length)return Object.assign(S0(),s,{u:Object.assign(S0().u,s.u)})}catch(e){}return S0()}
+function save(){S.ts=Date.now();try{localStorage.setItem('bsim1',JSON.stringify(S))}catch(e){}}
+const mult=()=>1+.1*S.u.b;
+const ips=()=>B.reduce((a,b,i)=>a+b.i*S.n[i],0)*mult();
+const clk=()=>(1+S.u.f)+ips()*.05*S.u.g;
+const cost=i=>Math.floor(B[i].c*1.15**S.n[i]);
+function fmt(v){if(v<1000)return v<10?v.toFixed(v%1?1:0):String(Math.floor(v));const s=['','K','M','B','T','Qa','Qi'];const k=Math.min(6,Math.floor(Math.log10(v)/3));return (v/10**(3*k)).toFixed(2)+s[k]}
+
+/* ---------- 3D ---------- */
+const R=new THREE.WebGLRenderer({canvas:$('c'),antialias:true});
+R.setPixelRatio(Math.min(devicePixelRatio||1,2));R.shadowMap.enabled=true;
+const sc=new THREE.Scene();sc.background=new THREE.Color(0x9fd8ff);sc.fog=new THREE.Fog(0x9fd8ff,45,100);
+const cam=new THREE.PerspectiveCamera(50,1,.1,200);
+sc.add(new THREE.HemisphereLight(0xffffff,0x6aa86a,.9));
+const sun=new THREE.DirectionalLight(0xfff1d0,.9);sun.position.set(12,22,10);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
+const sh=sun.shadow.camera;sh.left=sh.bottom=-20;sh.right=sh.top=20;sh.far=70;sc.add(sun);
+const M=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,flatShading:true,roughness:.85},o||{}));
+function box(w,h,d,c,x,y,z,g){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c));m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;g&&g.add(m);return m}
+function cy(rt,rb,h,c,x,y,z,g,seg){const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||8),M(c));m.position.set(x,y,z);m.castShadow=true;g&&g.add(m);return m}
+function winTex(rx,ry,col){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');g.fillStyle=col;g.fillRect(0,0,64,64);
+ for(let y=0;y<4;y++)for(let x=0;x<4;x++){g.fillStyle=Math.random()<.7?'#cdeeff':'#4a5a7a';g.fillRect(x*16+3,y*16+4,10,8)}
+ const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(Math.max(1,Math.round(rx)),Math.max(1,Math.round(ry)));return t}
+function tower(w,h,d,col,y,g){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(0xffffff,{map:winTex(w/1.1,h/1.1,col)}));m.position.y=y;m.castShadow=m.receiveShadow=true;g.add(m);return m}
+
+const mk=[
+g=>{box(2.4,1,1.6,0xffd23f,0,.5,0,g);box(2.9,.15,2.1,0xff5a5f,0,1.4,.1,g).rotation.x=.3;box(.1,1.4,.1,0xffffff,-1.3,.7,.9,g);box(.1,1.4,.1,0xffffff,1.3,.7,.9,g);
+ const l=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),M(0xffe14d));l.position.set(0,1.15,.2);g.add(l)},
+g=>{box(3,1.8,2.6,0xc98b5a,0,.9,0,g);box(3.4,.3,3,0x7a4a2e,0,1.95,0,g);box(.4,.8,.4,0x8a8f98,1,2.5,-.8,g);box(1.2,.45,.1,0xff7eb6,0,1.5,1.35,g);cy(0,.9,.5,0xff5a5f,-1.9,1.9,1.6,g,8);cy(.05,.05,1.6,0xffffff,-1.9,.8,1.6,g,4)},
+g=>{tower(2.4,3,2.4,'#f4b8a0',1.5,g);const r=new THREE.Mesh(new THREE.ConeGeometry(2,1.4,4),M(0xd1495b));r.position.y=3.7;r.rotation.y=Math.PI/4;r.castShadow=true;g.add(r);box(.5,.9,.5,0x8a8f98,.8,3.9,.5,g)},
+g=>{box(3.6,1.7,2.8,0x4ecdc4,0,.85,0,g);box(3.8,.2,3,0x2a9d8f,0,1.8,0,g);box(3.4,.55,.2,0xff9f1c,0,1.45,1.45,g);box(1.2,1.1,.1,0xcdeeff,.8,.6,1.42,g)},
+g=>{tower(2.3,5,2.3,'#6c7ae0',2.5,g);box(2.5,.25,2.5,0x39407a,0,5.1,0,g);box(.9,.6,.9,0x8a8f98,.4,5.5,.2,g)},
+g=>{box(3.5,1.7,2.7,0x9aa5b1,0,.85,0,g);box(3.5,.5,.9,0x6f7b88,0,1.9,.9,g).rotation.z=.15;cy(.28,.34,2.8,0xe5484d,-1.1,2.1,-.7,g,8);cy(.28,.34,2.8,0xe5484d,-.3,2.1,-.7,g,8);cy(.3,.3,.3,0xffffff,-1.1,3.3,-.7,g,8);box(.9,1,.1,0x39414d,1.1,.5,1.38,g)},
+g=>{tower(2.1,4.2,2.1,'#2e3a59',2.1,g);tower(1.5,3,1.5,'#3b4a73',5.7,g);cy(.04,.1,1.8,0xffd84a,0,8.1,0,g,6)},
+g=>{cy(1.8,2,.3,0x667085,0,.15,0,g,10);cy(.5,.6,3,0xffffff,0,1.9,0,g,10);cy(0,.5,1.1,0xff3b3b,0,3.95,0,g,10);
+ [0,2.1,4.2].forEach(a=>{const f=box(.1,.9,.7,0xff3b3b,Math.sin(a)*.7,.8,Math.cos(a)*.7,g);f.rotation.y=a});box(.3,3.4,.3,0xffb703,1.4,1.7,0,g)}];
+
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(220,220),M(0x8fd68b));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;sc.add(ground);
+box(44,.1,3.6,0x3a3f4b,0,.05,0,sc);for(let x=-20;x<=20;x+=3)box(1.4,.02,.18,0xffffff,x,.11,0,sc);
+const PX=[-7.8,-2.6,2.6,7.8],plots=[];
+B.forEach((b,i)=>{const px=PX[i%4],pz=i<4?-5:5;
+ const pad=box(4.6,.2,4.6,0xb8c4cf,px,.1,pz,sc);const g=new THREE.Group();g.position.set(px,.2,pz);g.userData={k:0,bump:0};mk[i](g);g.rotation.y=pz>0?Math.PI:0;g.visible=false;sc.add(g);plots.push({pad,g,x:px,z:pz})});
+function tree(x,z,s){const g=new THREE.Group(),c=[0x3fb950,0x2ea043,0x56d364][(Math.random()*3)|0];cy(.12,.18,.8,0x8b5a2b,0,.4,0,g,5);cy(0,.9,1.6,c,0,1.5,0,g,6);cy(0,.7,1.3,c,0,2.3,0,g,6);g.position.set(x,0,z);g.scale.setScalar(s);sc.add(g)}
+for(let x=-18;x<=18;x+=4.5){tree(x+Math.random(),-11-Math.random()*3,.9+Math.random()*.5);tree(x+Math.random(),11+Math.random()*3,.9+Math.random()*.5)}
+for(let z=-8;z<=8;z+=3.5)if(Math.abs(z)>2.5){tree(-14.5,z,1+Math.random()*.4);tree(14.5,z,1+Math.random()*.4)}
+const cars=[0xff5a5f,0x4dabf7,0xffd23f,0xa66cff,0x2ec4b6].map((c,i)=>{const g=new THREE.Group();box(1.4,.4,.7,c,0,.35,0,g);box(.7,.35,.6,0xdff3ff,-.1,.7,0,g);
+ const d=i%2?-1:1;g.position.set(-20+i*8,0,d*.8);g.userData={d,v:2.2+Math.random()*1.6};if(d<0)g.rotation.y=Math.PI;sc.add(g);return g});
+const clouds=[0,1,2,3].map(i=>{const g=new THREE.Group();for(let k=0;k<3;k++){const s=new THREE.Mesh(new THREE.SphereGeometry(1.5+Math.random(),7,5),new THREE.MeshBasicMaterial({color:0xffffff}));s.position.set(k*1.6,Math.random()*.5,0);s.scale.y=.6;g.add(s)}
+ g.position.set(-30+i*20,16+Math.random()*4,-12+Math.random()*24);sc.add(g);return g});
+
+let ang=1.1,rad=30,drag=false,moved=0,lx=0,idle=0;
+function resize(){const w=innerWidth,h=innerHeight;R.setSize(w,h);cam.aspect=w/h;rad=w/h<.8?38:28;cam.setViewOffset(w,h,0,h*.1,w,h);cam.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+const cv=$('c');
+cv.addEventListener('pointerdown',e=>{drag=true;moved=0;lx=e.clientX;idle=0;cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-lx;lx=e.clientX;moved+=Math.abs(dx);ang-=dx*.008;idle=0});
+cv.addEventListener('pointerup',e=>{drag=false;if(moved<10)tap(e.clientX,e.clientY)});
+cv.addEventListener('pointercancel',()=>drag=false);
+
+/* ---------- Spiel ---------- */
+function pop(x,y,t,c){const e=document.createElement('div');e.className='fl '+(c||'');e.textContent=t;e.style.left=x+'px';e.style.top=y+'px';document.body.appendChild(e);setTimeout(()=>e.remove(),900)}
+function tap(x,y){const v=clk();S.m+=v;S.t+=v;pop(x+(Math.random()*30-15),y,'+$'+fmt(v));try{navigator.vibrate&&navigator.vibrate(8)}catch(e){}}
+const tb=$('tap');
+tb.addEventListener('pointerdown',e=>{e.preventDefault();const r=tb.getBoundingClientRect();tb.classList.add('p');tap(r.left+r.width/2,r.top+10)});
+['pointerup','pointerleave','pointercancel'].forEach(n=>tb.addEventListener(n,()=>tb.classList.remove('p')));
+function modal(t,p,b){const m=$('modal');m.querySelector('h2').textContent=t;m.querySelector('p').textContent=p;m.querySelector('button').textContent=b||'Weiter';m.hidden=false}
+$('modal').querySelector('button').onclick=()=>$('modal').hidden=true;
+
+function buy(i){const c=cost(i);if(S.m<c)return;S.m-=c;S.n[i]++;plots[i].g.userData.bump=1;sync();shop();save()}
+function up(k){const u=U.find(x=>x.k===k),l=S.u[k],c=u.c(l);if(l>=u.max||S.m<c)return;S.m-=c;S.u[k]++;shop();save()}
+function sync(){plots.forEach((p,i)=>p.pad.material.color.set(S.n[i]>0?0x7bd66f:0xb8c4cf))}
+
+const l0=$('l0'),l1=$('l1');
+B.forEach((b,i)=>{const d=document.createElement('div');d.className='it';d.innerHTML='<div class="em">'+b.e+'</div><div class="inf"><b>'+b.n+'</b><small></small></div><button class="buy" data-b="'+i+'"></button>';l0.appendChild(d)});
+U.forEach(u=>{const d=document.createElement('div');d.className='it';d.innerHTML='<div class="em">'+u.e+'</div><div class="inf"><b>'+u.n+'</b><small></small></div><button class="buy" data-u="'+u.k+'"></button>';l1.appendChild(d)});
+l0.onclick=e=>{const b=e.target.closest('[data-b]');b&&buy(+b.dataset.b)};
+l1.onclick=e=>{const b=e.target.closest('[data-u]');b&&up(b.dataset.u)};
+function shop(){
+ [...l0.children].forEach((d,i)=>{d.querySelector('small').textContent='+$'+fmt(B[i].i*mult())+'/s pro Stück · Besitz: '+S.n[i];const b=d.querySelector('button'),c=cost(i);b.textContent='$'+fmt(c);b.classList.toggle('off',S.m<c)});
+ [...l1.children].forEach((d,i)=>{const u=U[i],l=S.u[u.k],b=d.querySelector('button');d.querySelector('small').textContent=u.d(l);
+  if(l>=u.max){b.textContent='MAX';b.classList.add('off')}else{const c=u.c(l);b.textContent='$'+fmt(c);b.classList.toggle('off',S.m<c)}});
+ $('tv').textContent='+$'+fmt(clk());
+ $('st').textContent='$'+fmt(S.t);$('of').textContent='50 % bis '+(2+2*S.u.o)+' Std.';
+}
+function hud(){$('money').textContent='$'+fmt(S.m);$('ips').textContent='+$'+fmt(ips())+' pro Sekunde';$('barf').style.width=Math.min(100,Math.max(0,Math.log10(S.m+1)/9*100))+'%'}
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
+ const t=+b.dataset.t,ls=$('lists');
+ if(b.classList.contains('on')){ls.hidden=!ls.hidden;return}
+ ls.hidden=false;document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+ [0,1,2].forEach(i=>$('l'+i).hidden=i!==t)});
+$('reset').onclick=()=>{if(confirm('Spielstand wirklich löschen?')){try{localStorage.removeItem('bsim1')}catch(e){}S=S0();plots.forEach(p=>{p.g.userData.k=0;p.g.visible=false});sync();shop();hud();modal('Neustart','Du startest wieder mit 100 $.','Los')}}
+
+function offline(){const dt=(Date.now()-S.ts)/1000;if(dt<60)return;const cap=(2+2*S.u.o)*3600,g=ips()*Math.min(dt,cap)*.5;
+ if(g>0){S.m+=g;S.t+=g;const h=Math.floor(Math.min(dt,cap)/3600),m=Math.floor(Math.min(dt,cap)%3600/60);
+  modal('Willkommen zurück!','Deine Gebäude haben in '+h+' Std. '+m+' Min. offline $'+fmt(g)+' verdient.','Einsammeln')}S.ts=Date.now()}
+addEventListener('pagehide',save);
+document.addEventListener('visibilitychange',()=>{document.hidden?save():offline()});
+setInterval(save,5000);
+
+sync();offline();shop();hud();
+if(S.t===0&&S.n.every(n=>!n))modal('Willkommen, zukünftiger Milliardär!','Du startest mit 100 $. Tippe auf die Stadt oder den Button, verdiene Geld und kaufe Gebäude, die automatisch Einnahmen erzeugen.','Los geht’s');
+
+let last=performance.now(),acc=0,ft=0;
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.1,(now-last)/1000);last=now;
+ const g=ips()*dt;S.m+=g;S.t+=g;
+ acc+=dt;if(acc>.15){acc=0;hud();shop()}
+ ft+=dt;if(ft>1.2){ft=0;const o=plots.filter((p,i)=>S.n[i]>0);if(o.length){const i=Math.floor(Math.random()*o.length),p=o[i],n=S.n[plots.indexOf(p)],v=new THREE.Vector3(p.x,4,p.z).project(cam);
+  if(v.z<1)pop((v.x*.5+.5)*innerWidth,(-v.y*.5+.5)*innerHeight,'+$'+fmt(B[plots.indexOf(p)].i*n*mult()*1.2),'s')}}
+ if(S.m>=1e9&&!S.win){S.win=true;save();modal('🎉 Du bist Milliardär!','Glückwunsch! Du hast 1 Milliarde Dollar erreicht. Spiele weiter und baue dein Imperium aus.','Weiterspielen')}
+ plots.forEach((p,i)=>{const u=p.g.userData,t=S.n[i]>0?1:0;u.k+=(t-u.k)*Math.min(1,dt*7);u.bump*=.9;p.g.visible=u.k>.02;
+  const s=u.k*(1+u.bump*.12),gy=1+Math.min(S.n[i],40)*.02;p.g.scale.set(s,s*gy,s)});
+ cars.forEach(c=>{c.position.x+=c.userData.d*c.userData.v*dt;if(c.position.x>22)c.position.x=-22;if(c.position.x<-22)c.position.x=22});
+ clouds.forEach(c=>{c.position.x+=dt*.6;if(c.position.x>40)c.position.x=-40});
+ idle+=dt;if(!drag&&idle>2)ang+=dt*.05;
+ cam.position.set(Math.sin(ang)*rad,16,Math.cos(ang)*rad);cam.lookAt(0,1,0);R.render(sc,cam)}
+requestAnimationFrame(loop);
+</script></body></html>
